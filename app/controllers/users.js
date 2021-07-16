@@ -198,7 +198,8 @@ exports.login = async (req, res) => {
 				apiResponse({
 					code: "error",
 					header: "User doesn't exist",
-					message: "There's no user with that email, please check your email or signup",
+					message:
+						"Login failed. There's no user with that email, please check your email or signup",
 				})
 			);
 		}
@@ -210,19 +211,27 @@ exports.login = async (req, res) => {
 					code: "error",
 					errors: "User doesn't exist",
 					message:
-						"The password you introduced is incorrect, please try again or try to recover your password.",
+						"Login failed. The password you introduced is incorrect, please try again or try to recover your password.",
 				})
 			);
 		} else {
-			const accessToken = await signToken(user.id);
-			const refreshToken = await signRefreshToken(user.id);
+			const accessToken = signToken(user.id);
+			const refreshToken = signRefreshToken(user.id);
+			// Update acces_log in user table
+			const updateLog = await prisma.acces_log.create({
+				data: {
+					login: new Date(),
+					logout: new Date(),
+					user_id: user.id,
+				},
+			});
 			res.status(200).send({
-				user: user,
 				code: "success",
 				header: "Welcome back",
-				message: "We are redirecting you to your account.",
+				message: "Successfully logged in. We are redirecting you to your account.",
 				accessToken: accessToken,
 				refreshToken: refreshToken,
+				logData: updateLog.login,
 			});
 		}
 	} catch (err) {
@@ -373,33 +382,30 @@ exports.receiveEmailGetToken = async (req, res) => {
 
 //Update role to user with id_user & id_role (FOR TESTING PURPOSE)
 exports.updateUserRole = async (req, res) => {
-	if (!req.body) {
-		res.status(400).send("Request is empty.");
+	if (!req.body.user_role_id) {
+		res.status(400).send("No user role data");
 	}
 	try {
-		const user = await prisma.user.update(
-			{user_role_id: req.body.user_role_id},
-			{where: {id: req.body.user_id}}
+		let user_id = parseInt(req.params.id);
+		// if query no succesfull, prisma query sends error message
+		await prisma.user.update({
+			where: {
+				id: user_id,
+			},
+			data: {
+				user_role_id: req.body.user_role_id,
+			},
+		});
+		
+		res.status(200).json(
+			apiResponse({
+				message: "User role successfully updated"
+			})
 		);
-		if (user === null) {
-			res.status(204).json({
-				success: "false",
-				message: "user not found",
-			});
-		} else {
-			//make update & return data
-
-			res.status(200).json({
-				success: "true",
-				name: user.name,
-				lastnames: user.lastnames,
-				user_role_id: user.user_role_id,
-			});
-		}
 	} catch (err) {
 		console.error(err);
 		res.status(500).send({
-			message: err.message || "Some error ocurred while retrieving your account.",
+			message: err.message || "role could not be modified",
 		});
 	}
 };
@@ -452,8 +458,9 @@ exports.forgetPassword = async (req, res) => {
 exports.recoverPassword = async (req, res) => {
 	try {
 		const token = req.params.token;
+		res.json({token: "hola"})
 
-		if (!token) {
+		/* if (!token) {
 			res.status(401).json(
 				apiResponse({
 					message: "Your token is empty.",
@@ -476,7 +483,7 @@ exports.recoverPassword = async (req, res) => {
 					message: "Authorization granted to change your password.",
 				})
 			);
-		});
+		}); */
 	} catch (err) {
 		console.log(err);
 		res.status(500).json(
